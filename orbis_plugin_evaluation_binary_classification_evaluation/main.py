@@ -1,10 +1,12 @@
-from orbis import app
+# -*- coding: utf-8 -*-
+
+from orbis_eval import app
 
 
-class BinaryClassificationEvaluation(object):
+class Main(object):
 
     def __init__(self, rucksack):
-        super(BinaryClassificationEvaluation, self).__init__()
+        super(Main, self).__init__()
         self.rucksack = rucksack
         self.file_name = rucksack.open['config']['file_name']
         self.scorer_condition = rucksack.open['config']['scoring']['condition']
