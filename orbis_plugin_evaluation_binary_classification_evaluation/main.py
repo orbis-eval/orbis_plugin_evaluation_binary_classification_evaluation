@@ -3,6 +3,10 @@
 from orbis_eval import app
 
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 class Main(object):
 
     def __init__(self, rucksack):
@@ -66,21 +70,23 @@ class Main(object):
             "no_score": 0,
             "empty_responses": 0
         }
-        app.logger.info("Starting Evaluation Calculation for {}".format(self.file_name))
+        logger.info("Starting Evaluation Calculation for {}".format(self.file_name))
         for item_key, item in self.computed.items():
-            # app.logger.debug(f"Evaluating item: {item}")
+            # logger.debug(f"Evaluating item: {item}")
             if len(item) <= 0:
                 stats["empty_responses"] += 1
                 if self.ignore_empty:
                     continue
-            current_gold = [entity for entity in self.gold[item_key] if entity["entity_type"] in self.entities]
+
+            # logger.error(f"\n\n77: {self.gold}\n\n")
+            current_gold = [entity for entity in self.gold.get(item_key, []) if entity["entity_type"] in self.entities]
             current_computed = [entity for entity in item if entity["entity_type"] in self.entities]
 
             # Scorer
             confusion_matrix = self.nel_scorer.run(current_computed, current_gold, self.scorer_condition)
-            # app.logger.debug("Gold Entities: {}".format(current_gold))
+            # logger.debug("Gold Entities: {}".format(current_gold))
             # multiline_logging(app, "Gold Entities: {}".format(current_gold))
-            # app.logger.debug("Computed Entities: {}".format(current_computed))
+            # logger.debug("Computed Entities: {}".format(current_computed))
             # multiline_logging(app, "Computed Entities: {}".format(current_computed))
             item_sum = len(current_gold)
             micro["tp_sum"] += confusion_matrix["tp_sum"]
@@ -146,11 +152,11 @@ class Main(object):
                 "f1_score": macro["f1_score"]
             }
         }
-        app.logger.debug(f'Running nel_evaluator for {self.file_name}')
-        app.logger.debug(f'Micro precision = {micro["precision"]}')
-        app.logger.debug(f'Micro recall = {micro["recall"]}')
-        app.logger.debug(f'Micro f1_score = {micro["f1_score"]}')
-        app.logger.debug(f'Macro precision = {macro["precision"]}')
-        app.logger.debug(f'Macro recall = {macro["recall"]}')
-        app.logger.debug(f'Macro f1_score = {macro["f1_score"]}')
+        logger.debug(f'Running nel_evaluator for {self.file_name}')
+        logger.debug(f'Micro precision = {micro["precision"]}')
+        logger.debug(f'Micro recall = {micro["recall"]}')
+        logger.debug(f'Micro f1_score = {micro["f1_score"]}')
+        logger.debug(f'Macro precision = {macro["precision"]}')
+        logger.debug(f'Macro recall = {macro["recall"]}')
+        logger.debug(f'Macro f1_score = {macro["f1_score"]}')
         return results
