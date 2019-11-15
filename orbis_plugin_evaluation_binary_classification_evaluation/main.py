@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from orbis_eval import app
-
-
 import logging
 logger = logging.getLogger(__name__)
 
