@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +45,20 @@ class Main(object):
     def run(self):
         self.rucksack.open["results"].update(self.binary_classification())
         return self.rucksack
+
+    def _calculate_metrics(self, confusion_matrix, item_sum, item, current_gold):
+        if len(item) == 0 and len(current_gold) == 0:
+            # Handling corner case when no element in gold document and no element returned.
+            # Handled the same way in gerbil:
+            # https://github.com/dice-group/gerbil/wiki/Precision,-Recall-and-F1-measure#dividing-by-0
+            precision = 1
+            recall = 1
+            f1_score = 1
+        else:
+            precision = self.bc_metrics.get_precision(confusion_matrix["tp_sum"], confusion_matrix["fp_sum"])
+            recall = self.bc_metrics.get_recall(confusion_matrix["tp_sum"], item_sum)
+            f1_score = self.bc_metrics.get_f1_score(precision, recall)
+        return precision, recall, f1_score
 
     def binary_classification(self):
         results = {
@@ -91,9 +106,7 @@ class Main(object):
             micro["fn_sum"] += confusion_matrix["fn_sum"]
             micro["item_sum"] += item_sum
             # Metrics
-            precision = self.bc_metrics.get_precision(confusion_matrix["tp_sum"], confusion_matrix["fp_sum"])
-            recall = self.bc_metrics.get_recall(confusion_matrix["tp_sum"], item_sum)
-            f1_score = self.bc_metrics.get_f1_score(precision, recall)
+            precision, recall, f1_score = self._calculate_metrics(confusion_matrix, item_sum, item, current_gold)
             macro["precision"] += precision
             macro["recall"] += recall
             macro["f1_score"] += f1_score
