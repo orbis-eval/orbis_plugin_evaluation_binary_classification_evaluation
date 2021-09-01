@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import logging
+from inspect import signature
+from collections import defaultdict
+from orbis_eval.libs.filter import keep_entity
 
 logger = logging.getLogger(__name__)
 
@@ -16,35 +19,53 @@ class Main(object):
         self.gold = rucksack.open['data']['gold']
         self.ignore_empty = rucksack.open['config']['scoring']['ignore_empty']
         self.entities = rucksack.open['config']['scoring'].get('entities', [])
+        self.annotations = rucksack.open['config']['scoring'].get('annotations', {})
+        self.use_annotations_for_scoring = True
 
         if len(self.entities) <= 0:
-            self.entities = self.get_all_entity_types()
+            self.entities = self._get_all_entity_types()
+
+        if not self.annotations:
+            self.annotations = self._get_all_annotation_types()
+            self.use_annotations_for_scoring = False
 
         self.scorer = rucksack.plugins["scoring"]
         self.nel_scorer = self.scorer()
         self.metrics = rucksack.plugins["metrics"]
         self.bc_metrics = self.metrics()
 
-    def get_all_entity_types(self):
+    def _get_all_entity_types(self):
         entity_types = set()
-        for item_key, item in self.gold.items():
-
-            for entity in item:
-                entity_type = entity.get('entity_type', False)
-                if entity_type:
-                    entity_types.add(entity_type)
-
-        for item_key, item in self.computed.items():
-            for entity in item:
-                entity_type = entity.get('entity_type', False)
-                if entity_type:
-                    entity_types.add(entity_type)
-
+        self._append_entity_types(entity_types, self.gold.items())
+        self._append_entity_types(entity_types, self.computed.items())
         return list(entity_types)
+
+    def _get_all_annotation_types(self):
+        annotation_types = defaultdict(set)
+        self._append_annotation_types(annotation_types, self.gold.items())
+        self._append_annotation_types(annotation_types, self.computed.items())
+        for annotation_type in annotation_types:
+            annotation_types[annotation_type] = list(annotation_types[annotation_type])
+        return dict(annotation_types)
 
     def run(self):
         self.rucksack.open["results"].update(self.binary_classification())
         return self.rucksack
+
+    def _append_entity_types(self, entity_types, items):
+        for item_key, item in items:
+            for entity in item:
+                entity_type = entity.get('entity_type', False)
+                if entity_type:
+                    entity_types.add(entity_type)
+
+    def _append_annotation_types(self, annotation_types, items):
+        for item_key, item in items:
+            for entity in item:
+                annotations = entity.get('annotations', {})
+                if annotations:
+                    for annotation in [x for x in annotations if 'type' in x and 'entity' in x]:
+                        annotation_types[annotation['type']].add(annotation['entity'])
 
     def _calculate_metrics(self, confusion_matrix, item_sum, item, current_gold):
         if len(item) == 0 and len(current_gold) == 0:
@@ -91,11 +112,20 @@ class Main(object):
                     continue
 
             # logger.error(f"\n\n77: {self.gold}\n\n")
-            current_gold = [entity for entity in self.gold.get(item_key, []) if entity["entity_type"] in self.entities]
-            current_computed = [entity for entity in item if entity["entity_type"] in self.entities]
+            current_gold = [entity for entity in self.gold.get(item_key, []) if entity["entity_type"] in self.entities
+                            and keep_entity(entity, self.annotations)]
+            current_computed = [entity for entity in item if entity["entity_type"] in self.entities
+                                and keep_entity(entity, self.annotations, current_gold)]
 
             # Scorer
-            confusion_matrix = self.nel_scorer.run(current_computed, current_gold, self.scorer_condition)
+            params_scorer = signature(self.nel_scorer.run).parameters
+            if len(params_scorer) == 3:
+                confusion_matrix = self.nel_scorer.run(current_computed, current_gold, self.scorer_condition)
+            elif len(params_scorer) == 4:
+                confusion_matrix = self.nel_scorer.run(current_computed, current_gold, self.scorer_condition,
+                                                       self.use_annotations_for_scoring)
+            else:
+                raise RuntimeError(f'Scorer has wrong number of parameters: {len(params_scorer)}')
             # logger.debug("Gold Entities: {}".format(current_gold))
             # multiline_logging(app, "Gold Entities: {}".format(current_gold))
             # logger.debug("Computed Entities: {}".format(current_computed))
@@ -146,6 +176,7 @@ class Main(object):
             "no_score": stats["no_score"],
             "empty_responses": stats["empty_responses"],
             "entities": self.entities,
+            "annotations": self.annotations,
 
             "total_tp": micro["tp_sum"],
             "total_fp": micro["fp_sum"],
